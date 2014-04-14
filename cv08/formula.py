@@ -48,6 +48,8 @@ class Variable(Formula):
         return i[self.name]
     def toString(self):
         return self.name
+    def getType(self,sign):
+        return tableau.ALPHA
 
 class Negation(Formula):
     def __init__(self, orig):
@@ -58,6 +60,10 @@ class Negation(Formula):
         return not self.originalFormula().eval(i)
     def toString(self):
         return "-%s" % (self.originalFormula().toString())
+    def getType(self,sign):
+        return tableau.ALPHA
+    def signedSubf(self,sign):
+        return [(not sign, self.originalFormula())]
 
 class Disjunction(Formula):
     def __init__(self, subs):
@@ -69,6 +75,15 @@ class Disjunction(Formula):
         return False
     def toString(self):
         return '(' + '|'.join([f.toString() for f in self.subf()]) + ')'
+    def getType(self,sign):
+        if sign:
+            return tableau.BETA
+        else:
+            return tableau.ALPHA
+        
+    def signedSubf(self, sign):
+        return [(sign, f) for f in self.subf()]
+    
 
 class Conjunction(Formula):
     def __init__(self, subs):
@@ -80,6 +95,15 @@ class Conjunction(Formula):
         return True
     def toString(self):
         return '(' + '&'.join([f.toString() for f in self.subf()]) + ')'
+    
+    def getType(self,sign):
+        if sign:
+            return tableau.ALPHA
+        else:
+            return tableau.BETA
+        
+    def signedSubf(self, sign):
+        return [(sign, f) for f in self.subf()]
 
 class Binary(Formula):
     def __init__(self, left, right, conj):
@@ -97,11 +121,27 @@ class Implication(Binary):
         Binary.__init__(self, left, right, '=>')
     def eval(self, i):
         return (not self.left().eval(i)) or self.right().eval(i)
+    def getType(self,sign):
+        if sign:
+            return tableau.BETA
+        else:
+            return tableau.ALPHA
+        
+    def signedSubf(self, sign):
+        return [(not sign, self.left()),(sign, self.right())]
 
 class Equivalence(Binary):
     def __init__(self, left, right):
         Binary.__init__(self, left, right, '<=>')
     def eval(self, i):
         return self.left().eval(i) == self.right().eval(i)
+    def getType(self,sign):
+        if sign:
+            return tableau.ALPHA
+        else:
+            return tableau.BETA
+        
+    def signedSubf(self, sign):
+        return [(sign, Implication(self.left(),self.right())),(sign, Implication(self.right(),self.left()))]
 
 # vim: set sw=4 ts=8 sts=4 et :
