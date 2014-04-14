@@ -21,6 +21,9 @@ class Variable(Formula):
         return i[self.name]
     def toString(self):
         return self.name
+    def toCnf(self):
+        """ Vrati reprezentaciu formuly v CNF tvare. """
+        return cnf.Cnf([cnf.CnfClause([cnf.CnfLit(self.name)])])
 
 class Negation(Formula):
     def __init__(self, orig):
@@ -32,6 +35,22 @@ class Negation(Formula):
     def toString(self):
         return "-%s" % (self.originalFormula().toString())
 
+    def doProduct(self, clauses, level):
+        if level < len(clauses):
+            for lit in clauses[level]:
+                self.currentLiterals.append(-lit) #pridame negovany literal
+                self.doProduct(clauses, level+1)
+                self.currentLiterals.pop()
+        else:
+            self.resCnf.append(cnf.CnfClause(self.currentLiterals))
+
+    def toCnf(self):
+        origcnf=self.originalFormula().toCnf()
+        self.resCnf=cnf.Cnf()
+        self.currentLiterals= []
+        self.doProduct(origcnf, 0)
+        return self.resCnf
+    
 class Disjunction(Formula):
     def __init__(self, subs):
         Formula.__init__(self, subs)
@@ -43,6 +62,26 @@ class Disjunction(Formula):
     def toString(self):
         return '(' + '|'.join([f.toString() for f in self.subf()]) + ')'
 
+    def doProduct(self, cnfs, level):
+        if level < len(cnfs):
+            for clause in cnfs[level]:
+                # pridame do currentClause literaly z cnfs[level]
+                self.currentClause.extend(clause)
+                self.doProduct(cnfs, level+1)
+                for i in range(len(clause)):
+                    self.currentClause.pop()
+        else:
+            self.resCnf.append(cnf.CnfClause(self.currentClause))
+
+    def toCnf(self):
+        origCnfs = []
+        for sf in self.subf():
+            origCnfs.append(sf.toCnf())
+        self.resCnf = cnf.Cnf()
+        self.currentClause=[]
+        self.doProduct(origCnfs, 0)
+        return self.resCnf
+    
 class Conjunction(Formula):
     def __init__(self, subs):
         Formula.__init__(self, subs)
@@ -54,7 +93,12 @@ class Conjunction(Formula):
     def toString(self):
         return '(' + '&'.join([f.toString() for f in self.subf()]) + ')'
 
-
+    def toCnf(self):
+        """ Vrati reprezentaciu formuly v CNF tvare. """
+        c=cnf.Cnf()
+        for sub in self.subf():
+            c.extend(sub.toCnf())
+        return c
 
 class Binary(Formula):
     def __init__(self, left, right, conj):
@@ -72,11 +116,14 @@ class Implication(Binary):
         Binary.__init__(self, left, right, '=>')
     def eval(self, i):
         return (not self.left().eval(i)) or self.right().eval(i)
+    def toCnf(self):
+        return Disjunction([Negation(self.left()), self.right()]).toCnf()
 
 class Equivalence(Binary):
     def __init__(self, left, right):
         Binary.__init__(self, left, right, '<=>')
     def eval(self, i):
         return self.left().eval(i) == self.right().eval(i)
-
+    def toCnf(self):
+        return Conjunction([Implication(self.left(), self.right()), Implication(self.right(), self.left()) ]).toCnf()
 # vim: set sw=4 ts=4 sts=4 et :
